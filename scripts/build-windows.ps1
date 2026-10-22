@@ -32,6 +32,9 @@ if ([string]::IsNullOrWhiteSpace($visualStudioPath)) {
 
 Push-Location $projectRoot
 try {
+    # On a fresh SDK, the first command also bootstraps the Flutter tool and
+    # prints dependency resolution messages. Finish that before parsing JSON.
+    Invoke-Flutter -FlutterArguments @('--version')
     $versionJson = & $flutterPath --version --machine
     if ($LASTEXITCODE -ne 0) {
         throw 'Unable to read the installed Flutter version.'
