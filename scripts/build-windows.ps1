@@ -71,12 +71,20 @@ try {
     # Bundle the Visual C++ runtime for computers without Visual Studio installed.
     $redistRoot = Join-Path $visualStudioPath 'VC\Redist\MSVC'
     $crtDirectories = @(Get-ChildItem -LiteralPath $redistRoot -Directory |
-        Sort-Object { [version]$_.Name } -Descending |
+        Sort-Object {
+            # Recent Visual Studio installations also contain aliases like v143.
+            if ($_.Name -match '^\d+(\.\d+){1,3}$') {
+                [version]$_.Name
+            } else {
+                [version]'0.0'
+            }
+        } -Descending |
         ForEach-Object { Join-Path $_.FullName 'x64\Microsoft.VC143.CRT' } |
         Where-Object { Test-Path -LiteralPath $_ })
     if ($crtDirectories.Count -eq 0) {
         throw 'Visual C++ x64 runtime files are missing. Repair the Visual Studio C++ installation.'
     }
+    Write-Host "Bundling Visual C++ runtime from $($crtDirectories[0])"
     Copy-Item -Path (Join-Path $crtDirectories[0] '*.dll') -Destination $packageDirectory -Force
     foreach ($runtime in @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')) {
         if (-not (Test-Path -LiteralPath (Join-Path $packageDirectory $runtime))) {
