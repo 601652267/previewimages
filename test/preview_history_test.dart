@@ -8,6 +8,33 @@ import 'package:previewimages/main.dart';
 import 'package:previewimages/preview_history.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+Future<void> disposeAndDeleteImages(
+  WidgetTester tester,
+  Directory directory,
+) async {
+  // Windows keeps files locked while an image read is still in flight.
+  await tester.pumpWidget(const SizedBox.shrink());
+  PaintingBinding.instance.imageCache
+    ..clear()
+    ..clearLiveImages();
+  await tester.runAsync(() async {
+    for (var attempt = 0;; attempt++) {
+      try {
+        await directory.delete(recursive: true);
+        return;
+      } on FileSystemException {
+        if (!await directory.exists()) {
+          return;
+        }
+        if (attempt >= 19) {
+          rethrow;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+    }
+  });
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -99,7 +126,7 @@ void main() {
   testWidgets('restores regions and image identity after files change',
       (tester) async {
     final directory = Directory.systemTemp.createTempSync('preview_history_');
-    addTearDown(() => directory.deleteSync(recursive: true));
+    addTearDown(() => disposeAndDeleteImages(tester, directory));
     final bytes = base64Decode(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk'
       '+A8AAQUBAScY42YAAAAASUVORK5CYII=',
@@ -166,7 +193,7 @@ void main() {
       (tester) async {
     final directory =
         Directory.systemTemp.createTempSync('preview_history_missing_');
-    addTearDown(() => directory.deleteSync(recursive: true));
+    addTearDown(() => disposeAndDeleteImages(tester, directory));
     final bytes = base64Decode(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk'
       '+A8AAQUBAScY42YAAAAASUVORK5CYII=',
