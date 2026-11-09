@@ -5,7 +5,10 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:previewimages/main.dart';
+import 'package:previewimages/app.dart';
+import 'package:previewimages/features/image_preview/image_preview_page.dart';
+import 'package:previewimages/features/image_regions/models/image_region_data.dart';
+import 'package:previewimages/features/image_regions/widgets/image_region_mosaic.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> pinchImage(
