@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -846,6 +847,7 @@ class _ImageRegionTileState extends State<ImageRegionTile> {
   Widget build(BuildContext context) {
     final region = widget.region;
     final images = region.images;
+    final scrollBehavior = ScrollConfiguration.of(context);
     final currentIndex = images.isEmpty
         ? 0
         : region.currentIndex.clamp(0, images.length - 1).toInt();
@@ -872,6 +874,12 @@ class _ImageRegionTileState extends State<ImageRegionTile> {
               onDoubleTap: () => widget.onOpenPreview(widget.regionIndex),
               child: PageView.builder(
                 controller: _pageController,
+                scrollBehavior: scrollBehavior.copyWith(
+                  dragDevices: <PointerDeviceKind>{
+                    ...scrollBehavior.dragDevices,
+                    PointerDeviceKind.mouse,
+                  },
+                ),
                 itemCount: images.length,
                 onPageChanged: (pageIndex) {
                   widget.onPageChanged(widget.regionIndex, pageIndex);

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -119,6 +120,67 @@ void main() {
     expect(tester.widget<Slider>(slider).value, 1);
     expect(regions.last.currentIndex, 0);
   });
+
+  testWidgets('mouse drags turn each Windows image region independently',
+      (tester) async {
+    final regions = List.generate(
+      2,
+      (index) => ImageRegionData(id: index)
+        ..images = files
+        ..currentIndex = 1,
+    );
+    int? openedRegion;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: StatefulBuilder(builder: (context, setState) {
+          return ImageRegionMosaic(
+            regions: regions,
+            showProgress: true,
+            onPickFolder: (_) {},
+            onOpenPreview: (index) => openedRegion = index,
+            onPageChanged: (regionIndex, pageIndex) {
+              setState(() => regions[regionIndex].currentIndex = pageIndex);
+            },
+          );
+        }),
+      ),
+    ));
+
+    Future<void> mouseDrag(int regionIndex, double direction) async {
+      final page = find.byType(PageView).at(regionIndex);
+      await tester.drag(
+        page,
+        Offset(tester.getSize(page).width * 0.75 * direction, 0),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await mouseDrag(0, -1);
+    expect(regions.first.currentIndex, 2);
+    expect(regions.last.currentIndex, 1);
+    expect(tester.widget<Slider>(find.byType(Slider).first).value, 2);
+
+    await mouseDrag(0, 1);
+    expect(regions.first.currentIndex, 1);
+    expect(regions.last.currentIndex, 1);
+
+    await mouseDrag(1, 1);
+    expect(regions.last.currentIndex, 0);
+    expect(regions.first.currentIndex, 1);
+    await mouseDrag(1, 1);
+    expect(regions.last.currentIndex, 0);
+    await mouseDrag(1, -1);
+    expect(regions.last.currentIndex, 1);
+    expect(regions.first.currentIndex, 1);
+
+    final page = find.byType(PageView).first;
+    await tester.tap(page, kind: PointerDeviceKind.mouse);
+    await tester.pump(const Duration(milliseconds: 60));
+    await tester.tap(page, kind: PointerDeviceKind.mouse);
+    await tester.pumpAndSettle();
+    expect(openedRegion, 0);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('preview image extends behind the transparent navigation bar',
       (tester) async {
