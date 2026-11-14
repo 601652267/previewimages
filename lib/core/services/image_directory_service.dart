@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import '../utils/file_name_comparator.dart';
 import '../utils/file_paths.dart';
 
 class ImageDirectoryService {
@@ -14,9 +15,7 @@ class ImageDirectoryService {
     }
 
     files.sort((a, b) {
-      return fileName(a.path).toLowerCase().compareTo(
-            fileName(b.path).toLowerCase(),
-          );
+      return compareFileNamesNaturally(fileName(a.path), fileName(b.path));
     });
     return files;
   }

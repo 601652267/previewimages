@@ -126,7 +126,7 @@ void main() {
     expect(find.text('暂无历史记录\n选择图片文件夹后自动保存'), findsOneWidget);
   });
 
-  testWidgets('restores regions and image identity after files change',
+  testWidgets('restores regions and image identity after natural sorting',
       (tester) async {
     final directory = Directory.systemTemp.createTempSync('preview_history_');
     addTearDown(() => disposeAndDeleteImages(tester, directory));
@@ -134,7 +134,7 @@ void main() {
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk'
       '+A8AAQUBAScY42YAAAAASUVORK5CYII=',
     );
-    for (final name in <String>['a', 'b', 'c']) {
+    for (final name in <String>['1', '2', '10']) {
       File('${directory.path}${Platform.pathSeparator}$name.png')
           .writeAsBytesSync(bytes);
     }
@@ -144,7 +144,7 @@ void main() {
       regions: <PreviewHistoryRegion>[
         PreviewHistoryRegion(
           folderPath: directory.path,
-          imagePath: '${directory.path}${Platform.pathSeparator}c.png',
+          imagePath: '${directory.path}${Platform.pathSeparator}10.png',
           currentIndex: 1,
         ),
         const PreviewHistoryRegion(),
