@@ -1,15 +1,18 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:previewimages/app.dart';
 import 'package:previewimages/features/image_regions/widgets/image_region_mosaic.dart';
 import 'package:previewimages/features/history/models/preview_history_entry.dart';
 import 'package:previewimages/features/history/models/preview_history_region.dart';
 import 'package:previewimages/features/history/repositories/preview_history_store.dart';
+import 'package:previewimages/features/history/repositories/history_file_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'support/history_test_environment.dart';
 
 Future<void> disposeAndDeleteImages(
   WidgetTester tester,
@@ -51,13 +54,20 @@ void main() {
     );
   }
 
-  setUp(() {
+  late Directory historyDirectory;
+
+  setUp(() async {
+    historyDirectory = await createHistoryTestDirectory();
     SharedPreferences.setMockInitialValues(<String, Object>{});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
       const MethodChannel('previewimages/history_folders'),
       (_) async => null,
     );
+  });
+
+  tearDown(() async {
+    await deleteHistoryTestDirectory(historyDirectory);
   });
 
   test('keeps ten newest entries and persists them across store reloads',
@@ -114,13 +124,149 @@ void main() {
     expect(store.entries.length, 1);
   });
 
+  test('merges saves from three stores that loaded the same old history',
+      () async {
+    final stores = List.generate(3, (_) => PreviewHistoryStore());
+    await Future.wait(stores.map((store) => store.load()));
+    await Future.wait(
+        List.generate(3, (index) => stores[index].remember(entry(index))));
+    for (final store in stores) {
+      await store.load();
+      expect(store.entries.length, 3);
+      expect(
+          store.entries.map((value) => value.regions.single.folderPath).toSet(),
+          <String>{'/images/0', '/images/1', '/images/2'});
+    }
+    await stores.first.remember(entry(1, position: 9));
+    await stores.last.load();
+    expect(stores.last.entries.length, 3);
+    expect(
+        stores.last.entries
+            .firstWhere((value) => value.id == entry(1).id)
+            .regions
+            .single
+            .currentIndex,
+        9);
+  });
+
+  test('stale stores cannot resurrect deleted or cleared history', () async {
+    final first = PreviewHistoryStore();
+    final second = PreviewHistoryStore();
+    await first.remember(entry(1));
+    await second.load();
+    await first.remove(entry(1).id);
+    await second.remember(entry(2));
+    await first.load();
+    expect(first.entries.map((value) => value.id), <String>[entry(2).id]);
+    await first.clear();
+    await second.remember(entry(3));
+    await first.load();
+    expect(first.entries.map((value) => value.id), <String>[entry(3).id]);
+  });
+
+  test('enforces one shared ten-entry limit across simultaneous stores',
+      () async {
+    final stores = List.generate(3, (_) => PreviewHistoryStore());
+    await Future.wait(List.generate(
+        12, (index) => stores[index % stores.length].remember(entry(index))));
+    for (final store in stores) {
+      await store.load();
+      expect(store.entries.length, 10);
+      expect(store.entries.first.id, entry(11).id);
+      expect(store.entries.last.id, entry(2).id);
+    }
+  });
+
+  test('releases the file lock when a transaction fails', () async {
+    final file =
+        File('${historyDirectory.path}${Platform.pathSeparator}failure.json');
+    final storage = HistoryFileStorage(fileProvider: () async => file);
+    await expectLater(
+        storage.transaction((_) => throw StateError('test failure')),
+        throwsStateError);
+    final store = PreviewHistoryStore(storage: storage);
+    await store.remember(entry(7));
+    await store.load();
+    expect(store.entries.single.id, entry(7).id);
+  });
+
+  test('imports legacy history once without reimporting after clear', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      PreviewHistoryStore.storageKey: jsonEncode([entry(4).toJson()]),
+    });
+    final first = PreviewHistoryStore();
+    await first.load();
+    expect(first.entries.single.id, entry(4).id);
+    await first.clear();
+    final second = PreviewHistoryStore();
+    await second.load();
+    expect(second.entries, isEmpty);
+  });
+
+  test(
+      'real processes preserve each others latest progress under concurrent writes',
+      () async {
+    final configFile = File('.dart_tool/package_config.json').absolute;
+    final config = jsonDecode(await configFile.readAsString()) as Map;
+    final flutterPackage = (config['packages'] as List)
+        .firstWhere((value) => value['name'] == 'flutter') as Map;
+    final flutterDirectory = Directory.fromUri(
+        configFile.uri.resolve(flutterPackage['rootUri'] as String));
+    final dart = File.fromUri(flutterDirectory.uri.resolve(
+            '../../bin/cache/dart-sdk/bin/dart${Platform.isWindows ? '.exe' : ''}'))
+        .path;
+    final file =
+        File('${historyDirectory.path}${Platform.pathSeparator}processes.json');
+    final processes = <Process>[];
+    final outputs = <Future<List<String>>>[];
+    final errors = <Future<String>>[];
+    final ready = <Future<void>>[];
+    for (var index = 0; index < 4; index++) {
+      final process = await Process.start(dart, [
+        '--packages=${configFile.path}',
+        File('test/support/history_process_worker.dart').absolute.path,
+        file.path,
+        '$index',
+      ]);
+      processes.add(process);
+      addTearDown(() => process.kill());
+      errors.add(process.stderr.transform(utf8.decoder).join());
+      final started = Completer<void>();
+      ready.add(started.future);
+      outputs.add(process.stdout
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .map((line) {
+        if (line == 'READY') started.complete();
+        return line;
+      }).toList());
+    }
+    await Future.wait(ready).timeout(const Duration(seconds: 30));
+    for (final process in processes) {
+      process.stdin.writeln('go');
+      await process.stdin.flush();
+    }
+    final exits =
+        await Future.wait(processes.map((process) => process.exitCode))
+            .timeout(const Duration(seconds: 30));
+    final stderr = await Future.wait(errors);
+    expect(exits, everyElement(0), reason: stderr.join('\n'));
+    expect(await Future.wait(outputs), everyElement(contains('DONE')));
+    final store = PreviewHistoryStore(
+        storage: HistoryFileStorage(fileProvider: () async => file));
+    await store.load();
+    expect(store.entries.length, 4);
+    expect(store.entries.map((value) => value.regions.single.currentIndex),
+        everyElement(14));
+  });
+
   testWidgets('history starts empty and can be opened from the toolbar',
       (tester) async {
-    await tester.pumpWidget(const MyApp());
+    await pumpHistoryApp(tester);
     await tester.runAsync(() async {
       await Future<void>.delayed(Duration.zero);
     });
-    await tester.runAsync(() => tester.tap(find.text('历史')));
+    await openHistory(tester);
     await tester.pumpAndSettle();
     expect(find.text('历史记录 0/10'), findsOneWidget);
     expect(find.text('暂无历史记录\n选择图片文件夹后自动保存'), findsOneWidget);
@@ -153,11 +299,11 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{
       PreviewHistoryStore.storageKey: jsonEncode(<Object>[saved.toJson()]),
     });
-    await tester.pumpWidget(const MyApp());
+    await pumpHistoryApp(tester);
     await tester.runAsync(() async {
       await Future<void>.delayed(Duration.zero);
     });
-    await tester.runAsync(() => tester.tap(find.text('历史')));
+    await openHistory(tester);
     await tester.pumpAndSettle();
     expect(find.text('历史记录 1/10'), findsOneWidget);
     await tester.tap(find.byType(ListTile));
@@ -177,18 +323,20 @@ void main() {
 
     await tester.drag(find.byType(PageView).first, const Offset(600, 0));
     await tester.pumpAndSettle();
-    await tester.runAsync(() async {
-      await Future<void>.delayed(Duration.zero);
-    });
+    await flushHistoryIO(tester);
     final stored = PreviewHistoryStore();
-    await tester.runAsync(stored.load);
+    await flushHistoryIO(tester, store: stored);
     expect(stored.entries.single.regions.first.currentIndex, 1);
 
-    await tester.runAsync(() => tester.tap(find.text('历史')));
+    await openHistory(tester);
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('删除记录'));
+    await tester.runAsync(() async {
+      await tester.tap(find.byTooltip('删除记录'));
+    });
+    await flushHistoryIO(tester);
     await tester.pumpAndSettle();
     expect(find.text('历史记录 0/10'), findsOneWidget);
+    await flushHistoryIO(tester);
   });
 
   testWidgets(
@@ -219,9 +367,9 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{
       PreviewHistoryStore.storageKey: jsonEncode(<Object>[saved.toJson()]),
     });
-    await tester.pumpWidget(const MyApp());
+    await pumpHistoryApp(tester);
     await tester.runAsync(() async => Future<void>.delayed(Duration.zero));
-    await tester.runAsync(() => tester.tap(find.text('历史')));
+    await openHistory(tester);
     await tester.pumpAndSettle();
     await tester.tap(find.byType(ListTile));
     await tester.pump();
@@ -236,5 +384,31 @@ void main() {
     expect(mosaic.regions.last.isLoading, isFalse);
     expect(find.text('文件夹不存在或无访问权限，请重新选择'), findsOneWidget);
     expect(find.text('选择文件夹'), findsOneWidget);
+    await flushHistoryIO(tester);
+  });
+
+  testWidgets('existing programs see other programs history and live refresh',
+      (tester) async {
+    await pumpHistoryApp(tester);
+    final second = PreviewHistoryStore();
+    await tester.runAsync(() async {
+      await second.remember(entry(2));
+      await second.remember(entry(3));
+    });
+    await openHistory(tester);
+    expect(find.text('历史记录 2/10'), findsOneWidget);
+
+    await tester.runAsync(() => second.remember(entry(4)));
+    await tester.pump(const Duration(seconds: 2));
+    await flushHistoryIO(tester);
+    expect(find.text('历史记录 3/10'), findsOneWidget);
+
+    await tester.runAsync(() async {
+      await tester.tap(find.text('清空'));
+    });
+    await flushHistoryIO(tester);
+    await flushHistoryIO(tester, store: second);
+    expect(second.entries, isEmpty);
+    expect(find.text('历史记录 0/10'), findsOneWidget);
   });
 }

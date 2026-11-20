@@ -88,6 +88,12 @@ class _ImageRegionsPageState extends State<ImageRegionsPage>
 
   Future<void> _openHistory() async {
     await historyLoaded;
+    try {
+      await historyStore.load();
+    } on Exception catch (error) {
+      showHistoryError('无法读取历史记录：$error');
+      return;
+    }
     if (!mounted || _isRestoring) {
       return;
     }

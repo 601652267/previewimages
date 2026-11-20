@@ -5,11 +5,12 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:previewimages/app.dart';
 import 'package:previewimages/features/image_preview/image_preview_page.dart';
 import 'package:previewimages/features/image_regions/models/image_region_data.dart';
 import 'package:previewimages/features/image_regions/widgets/image_region_mosaic.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'support/history_test_environment.dart';
 
 Future<void> pinchImage(
   WidgetTester tester,
@@ -42,7 +43,10 @@ void main() {
   late Directory imageDirectory;
   late List<File> files;
 
-  setUp(() {
+  late Directory historyDirectory;
+
+  setUp(() async {
+    historyDirectory = await createHistoryTestDirectory();
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
@@ -64,8 +68,12 @@ void main() {
     imageDirectory.deleteSync(recursive: true);
   });
 
+  tearDown(() async {
+    await deleteHistoryTestDirectory(historyDirectory);
+  });
+
   testWidgets('starts with one image region', (WidgetTester tester) async {
-    await tester.pumpWidget(const MyApp());
+    await pumpHistoryApp(tester);
 
     expect(find.text('图片预览'), findsOneWidget);
     expect(find.text('区域数'), findsOneWidget);
