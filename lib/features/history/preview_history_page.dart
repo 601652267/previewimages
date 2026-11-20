@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import 'repositories/preview_history_store.dart';
@@ -15,36 +13,6 @@ class PreviewHistoryPage extends StatefulWidget {
 }
 
 class _PreviewHistoryPageState extends State<PreviewHistoryPage> {
-  Timer? _refreshTimer;
-  bool _refreshing = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      unawaited(_refresh());
-    });
-  }
-
-  @override
-  void dispose() {
-    _refreshTimer?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _refresh() async {
-    if (_refreshing) return;
-    _refreshing = true;
-    try {
-      await widget.store.load();
-      if (mounted) setState(() {});
-    } on Exception {
-      // A manual refresh reports errors; background polling can retry quietly.
-    } finally {
-      _refreshing = false;
-    }
-  }
-
   Future<void> _change(Future<void> Function() action) async {
     try {
       await action();

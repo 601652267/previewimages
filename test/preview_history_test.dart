@@ -70,17 +70,17 @@ void main() {
     await deleteHistoryTestDirectory(historyDirectory);
   });
 
-  test('keeps ten newest entries and persists them across store reloads',
+  test('keeps thirty newest entries and persists them across store reloads',
       () async {
     final store = PreviewHistoryStore();
     await store.load();
-    for (var index = 0; index < 12; index++) {
+    for (var index = 0; index < 32; index++) {
       await store.remember(entry(index));
     }
     final restored = PreviewHistoryStore();
     await restored.load();
-    expect(restored.entries.length, 10);
-    expect(restored.entries.first.regions.single.folderPath, '/images/11');
+    expect(restored.entries.length, 30);
+    expect(restored.entries.first.regions.single.folderPath, '/images/31');
     expect(restored.entries.last.regions.single.folderPath, '/images/2');
   });
 
@@ -164,15 +164,15 @@ void main() {
     expect(first.entries.map((value) => value.id), <String>[entry(3).id]);
   });
 
-  test('enforces one shared ten-entry limit across simultaneous stores',
+  test('enforces one shared thirty-entry limit across simultaneous stores',
       () async {
     final stores = List.generate(3, (_) => PreviewHistoryStore());
     await Future.wait(List.generate(
-        12, (index) => stores[index % stores.length].remember(entry(index))));
+        32, (index) => stores[index % stores.length].remember(entry(index))));
     for (final store in stores) {
       await store.load();
-      expect(store.entries.length, 10);
-      expect(store.entries.first.id, entry(11).id);
+      expect(store.entries.length, 30);
+      expect(store.entries.first.id, entry(31).id);
       expect(store.entries.last.id, entry(2).id);
     }
   });
@@ -227,6 +227,7 @@ void main() {
         File('test/support/history_process_worker.dart').absolute.path,
         file.path,
         '$index',
+        '${PreviewHistoryStore.maxEntries}',
       ]);
       processes.add(process);
       addTearDown(() => process.kill());
@@ -268,7 +269,7 @@ void main() {
     });
     await openHistory(tester);
     await tester.pumpAndSettle();
-    expect(find.text('历史记录 0/10'), findsOneWidget);
+    expect(find.text('历史记录 0/30'), findsOneWidget);
     expect(find.text('暂无历史记录\n选择图片文件夹后自动保存'), findsOneWidget);
   });
 
@@ -305,7 +306,7 @@ void main() {
     });
     await openHistory(tester);
     await tester.pumpAndSettle();
-    expect(find.text('历史记录 1/10'), findsOneWidget);
+    expect(find.text('历史记录 1/30'), findsOneWidget);
     await tester.tap(find.byType(ListTile));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
@@ -335,7 +336,7 @@ void main() {
     });
     await flushHistoryIO(tester);
     await tester.pumpAndSettle();
-    expect(find.text('历史记录 0/10'), findsOneWidget);
+    expect(find.text('历史记录 0/30'), findsOneWidget);
     await flushHistoryIO(tester);
   });
 
@@ -387,7 +388,7 @@ void main() {
     await flushHistoryIO(tester);
   });
 
-  testWidgets('existing programs see other programs history and live refresh',
+  testWidgets('history refreshes on opening and on request without polling',
       (tester) async {
     await pumpHistoryApp(tester);
     final second = PreviewHistoryStore();
@@ -396,12 +397,14 @@ void main() {
       await second.remember(entry(3));
     });
     await openHistory(tester);
-    expect(find.text('历史记录 2/10'), findsOneWidget);
+    expect(find.text('历史记录 2/30'), findsOneWidget);
 
     await tester.runAsync(() => second.remember(entry(4)));
-    await tester.pump(const Duration(seconds: 2));
+    await tester.pump(const Duration(seconds: 6));
+    expect(find.text('历史记录 2/30'), findsOneWidget);
+    await tester.runAsync(() => tester.tap(find.byTooltip('刷新历史记录')));
     await flushHistoryIO(tester);
-    expect(find.text('历史记录 3/10'), findsOneWidget);
+    expect(find.text('历史记录 3/30'), findsOneWidget);
 
     await tester.runAsync(() async {
       await tester.tap(find.text('清空'));
@@ -409,6 +412,6 @@ void main() {
     await flushHistoryIO(tester);
     await flushHistoryIO(tester, store: second);
     expect(second.entries, isEmpty);
-    expect(find.text('历史记录 0/10'), findsOneWidget);
+    expect(find.text('历史记录 0/30'), findsOneWidget);
   });
 }

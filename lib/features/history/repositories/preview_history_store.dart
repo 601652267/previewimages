@@ -14,7 +14,7 @@ class PreviewHistoryStore {
               initialEntries: _legacyEntries,
             );
 
-  static const maxEntries = 10;
+  static const maxEntries = 30;
   static const storageKey = 'preview_history_v1';
   static const fileName = 'preview_history_v2.json';
 

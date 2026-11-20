@@ -21,7 +21,7 @@ Future<void> main(List<String> arguments) async {
     await storage.transaction((entries) {
       entries.removeWhere((existing) => existing.id == entry.id);
       entries.insert(0, entry);
-      return entries.take(10).toList();
+      return entries.take(int.parse(arguments[2])).toList();
     });
   }
   stdout.writeln('DONE');

@@ -98,9 +98,10 @@ Preview Images for Windows x64
 Extract the entire ZIP, then double-click previewimages.exe.
 Keep the DLL files and data folder beside the executable.
 
-History automatically saves up to 10 preview arrangements, including
+History automatically saves up to 30 preview arrangements, including
 folder paths, region count, and browsing position. Use History to restore,
-delete, or clear saved entries. Your image folders must remain accessible.
+delete, or clear saved entries. Use Refresh to read changes from other windows.
+Your image folders must remain accessible.
 '@ | Set-Content -LiteralPath (Join-Path $packageDirectory 'README.txt') -Encoding UTF8
 
     $zipPath = Join-Path $distributionDirectory 'previewimages-windows-x64.zip'
