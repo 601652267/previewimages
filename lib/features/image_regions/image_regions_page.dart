@@ -370,36 +370,8 @@ class _ImageRegionsPageState extends State<ImageRegionsPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('图片预览'),
-        centerTitle: false,
-        actions: <Widget>[
-          TextButton.icon(
-            onPressed: _isRestoring ? null : _openHistory,
-            icon: const Icon(Icons.history, size: 20),
-            label: const Text('历史'),
-          ),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _showProgress = !_showProgress;
-              });
-              _recordHistory();
-            },
-            style: TextButton.styleFrom(
-              foregroundColor: _showProgress
-                  ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context).colorScheme.onSurface,
-              backgroundColor: _showProgress
-                  ? Theme.of(context).colorScheme.primaryContainer
-                  : null,
-            ),
-            child: const Text('进度'),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           RegionCountBar(
             controller: _regionCountController,
@@ -408,6 +380,12 @@ class _ImageRegionsPageState extends State<ImageRegionsPage>
             onChanged: _applyRegionCount,
             onDecrement: _decrementRegionCount,
             onIncrement: _incrementRegionCount,
+            onOpenHistory: _isRestoring ? null : _openHistory,
+            showProgress: _showProgress,
+            onToggleProgress: () {
+              setState(() => _showProgress = !_showProgress);
+              _recordHistory();
+            },
           ),
           Expanded(
             child: ImageRegionMosaic(

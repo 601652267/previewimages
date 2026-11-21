@@ -72,11 +72,21 @@ void main() {
     await deleteHistoryTestDirectory(historyDirectory);
   });
 
-  testWidgets('starts with one image region', (WidgetTester tester) async {
+  testWidgets('fits the region controls and actions on one row at 320 px',
+      (WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(const Size(320, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await pumpHistoryApp(tester);
 
-    expect(find.text('图片预览'), findsOneWidget);
-    expect(find.text('区域数'), findsOneWidget);
+    expect(find.byType(AppBar), findsNothing);
+    expect(find.text('图片预览'), findsNothing);
+    final countLabel = find.text('区域数');
+    final history = find.text('历史');
+    final progress = find.text('进度');
+    expect(tester.getCenter(history).dy,
+        closeTo(tester.getCenter(countLabel).dy, 1));
+    expect(tester.getCenter(progress).dy,
+        closeTo(tester.getCenter(countLabel).dy, 1));
     expect(find.widgetWithText(TextField, '1'), findsOneWidget);
     expect(find.text('选择文件夹'), findsOneWidget);
     expect(tester.getSize(find.byType(TextField)).height, 32);
